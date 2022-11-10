@@ -9,8 +9,11 @@
 
   outputs = { nixpkgs, flake-utils, ... }: flake-utils.lib.eachDefaultSystem (system:
     let pkgs = import nixpkgs { inherit system; };
+        lua = (pkgs.lua5_4.withPackages(ps: with ps; [ lpeg lpeg_patterns lpeglabel ]));
     in {
-      devShells.default = pkgs.mkShell { nativeBuildInputs = with pkgs; [ llvm clang clang-tools ]; };
+      devShells.default = pkgs.mkShell {
+        nativeBuildInputs = with pkgs; [ lua llvm clang clang-tools ];
+      };
     }
   );
 }
