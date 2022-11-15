@@ -1,3 +1,5 @@
+#!/usr/bin/env lua
+
 local lpeg = require "lpeg"
 
 local pt = require "pt"
@@ -188,7 +190,7 @@ local Compiler = { funcs = {}, vars = {}, nvars = 0 }
 
 
 function Compiler:newcount ()
-  local count = self.count 
+  local count = self.count
   self.count = count + 1
   return count
 end
@@ -385,16 +387,20 @@ function Compiler:codeStat (ast)
     self:codeCall(ast)
     self:addCode("pop", 1)
   elseif tag == "local" then
+  	local reg = self:newreg()
+  	self:emit("%s = alloca %s\n", reg, type2VM(ast.ty))
     if not ast.e then
       self:addCode("push", 0)
     else
       self:codeExp(ast.e)
-    end
-    if ast.e and not typeEq(ast.e.ty, ast.ty) then
-      throw("incompatible types")
+      if ast.e and not typeEq(ast.e.ty, ast.ty) then
+        throw("incompatible types")
+      end
+      local ereg = ast.e.res
+      self:emit("store %s %s, %s* %s\n", type2VM(ast.e.ty), ereg, type2VM(ast.ty), reg)
     end
     self.locals[#self.locals + 1] = ast
-    ast.idx = #self.locals
+    ast.idx = reg
   elseif tag == "while" then
     local target = #self.code
     local L1 = newlabel()
@@ -446,7 +452,7 @@ function Compiler:codeFloatExp (ast)
 end
 
 local ops = {["+"] = "fadd", ["-"] = "fsub",
-             ["*"] = "fmul", ["/"] = "fdiv", 
+             ["*"] = "fmul", ["/"] = "fdiv",
 }
 
 function Compiler:codeExp (ast)
