@@ -1,3 +1,5 @@
+#!/usr/bin/env lua
+
 local lpeg = require "lpeg"
 
 local pt = require "pt"
@@ -188,7 +190,7 @@ local Compiler = { funcs = {}, vars = {}, nvars = 0 }
 
 
 function Compiler:newcount ()
-  local count = self.count 
+  local count = self.count
   self.count = count + 1
   return count
 end
@@ -488,7 +490,12 @@ function Compiler:codeExp (ast)
       throw("indexing a non array")
     end
     self:codeIntExp(ast.index)
-    self:addCode("getarray")
+    local idx = ast.index.res
+    local elem = type2VM(aty.elem)
+    ast.res = self:newreg()
+    self:emit([[
+%s = getelementptr %s, %s* %s, i64 %s
+]], ast.res, elem, elem, ast.array.res, idx)
     ty = aty.elem
   elseif tag == "newarray" then
     local resizep = self:newreg()
@@ -515,7 +522,6 @@ function Compiler:codeExp (ast)
   elseif tag == "not" then
     local reg1 = self:newreg()
     local reg2 = self:newreg()
-    ast.res = reg
     self:codeIntExp(ast.e)
     self:emit("%s = icmp eq i32 %s, 0\n%s = zext i1 %s to i32\n",
       reg1, ast.e.res, reg2, reg1)
