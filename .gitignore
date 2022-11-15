@@ -1,5 +1,6 @@
 /.direnv/
 *.bk
+*.bak
 *.orig
 *.old
 *.rej
