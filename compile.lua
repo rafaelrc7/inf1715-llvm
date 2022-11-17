@@ -337,7 +337,7 @@ function Compiler:codeLhs (ast)
     if not loc then
       self:addCode("storeG", self:name2idx(ast.id))
     else
-      self:addCode("storeL", loc.idx)
+      ast.res = loc.idx
       return loc.ty
     end
   elseif tag == "indexed" then
@@ -345,8 +345,15 @@ function Compiler:codeLhs (ast)
     if tyarr.tag ~= "array" then
       throw("indexing a non array")
     end
+
+    ast.res = self:newreg()
+    local elem = type2VM(tyarr.elem)
+
     self:codeIntExp(ast.index)
-    self:addCode("setarray")
+    self:emit([[
+%s = getelementptr %s, %s* %s, i64 %s
+]], ast.res, elem, elem, ast.array.res, ast.index.res)
+
     return tyarr.elem
   else error("unknown tag " .. tag)
   end
@@ -442,6 +449,8 @@ function Compiler:codeStat (ast)
     if not typeEq(tyrhs, tylhs) then
       throw("invalid assignment")
     end
+    local lety = type2VM(tyrhs)
+    self:emit("store %s %s, %s* %s\n", lety, ast.exp.res, lety, ast.lhs.res)
   elseif tag == "block" then
     local nvars = #self.locals
     for i = 1, #ast.body do
