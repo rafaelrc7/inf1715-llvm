@@ -492,10 +492,13 @@ function Compiler:codeExp (ast)
     self:codeIntExp(ast.index)
     local idx = ast.index.res
     local elem = type2VM(aty.elem)
+    local ptr = self:newreg()
     ast.res = self:newreg()
     self:emit([[
 %s = getelementptr %s, %s* %s, i64 %s
-]], ast.res, elem, elem, ast.array.res, idx)
+%s = load %s, %s* %s
+]], ptr, elem, elem, ast.array.res, idx,
+	ast.res, elem, elem, ptr)
     ty = aty.elem
   elseif tag == "newarray" then
     local resizep = self:newreg()
