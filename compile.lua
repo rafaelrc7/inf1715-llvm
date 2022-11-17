@@ -143,6 +143,8 @@ local grammar = lpeg.P{"prog",
        + Rw"if" * exp * block * (Rw"else" * block)^-1
               / node("if", "cond", "th", "el")
        + Rw"return" * exp * T";" / node("return", "e")
+       + Rw"delarray" * (ID / node("var", "id"))
+              / node("delarray", "array")
        + call
        + lhs * T"=" * exp * T";" / node("assg", "lhs", "exp"),
 
@@ -461,6 +463,20 @@ function Compiler:codeStat (ast)
       self:addCode("pop", diff)
       for i = 1, diff do table.remove(self.locals) end
     end
+  elseif tag == "delarray" then
+    local tyarr = self:codeExp(ast.array)
+    if tyarr.tag ~= "array" then
+      throw("delarray expects array but got " .. tyarr.tag)
+    end
+
+    local arr = ast.array.res
+    local i8ptr = self:newreg()
+    local tyelem = type2VM(ast.array.ty.elem)
+
+    self:emit([[
+%s = bitcast %s* %s to i8*
+call void @free(i8* %s)
+]], i8ptr, tyelem, arr, i8ptr)
   else error("unknown tag " .. tag)
   end
 end
@@ -609,6 +625,7 @@ end
 function compile (ast)
   Compiler:emit[[
 declare i8* @malloc(i64)
+declare void @free(i8*)
 
 ]]
   for i = 1, #ast do
