@@ -350,11 +350,12 @@ function Compiler:codeLhs (ast)
 
     ast.res = self:newreg()
     local elem = type2VM(tyarr.elem)
-
     self:codeIntExp(ast.index)
+    local idx = ast.index.res
+	local idxty = type2VM(ast.index.ty)
     self:emit([[
-%s = getelementptr %s, %s* %s, i64 %s
-]], ast.res, elem, elem, ast.array.res, ast.index.res)
+%s = getelementptr %s, %s* %s, %s %s
+]], ast.res, elem, elem, ast.array.res, idxty, idx)
 
     return tyarr.elem
   else error("unknown tag " .. tag)
@@ -516,13 +517,14 @@ function Compiler:codeExp (ast)
     end
     self:codeIntExp(ast.index)
     local idx = ast.index.res
+	local idxty = type2VM(ast.index.ty)
     local elem = type2VM(aty.elem)
     local ptr = self:newreg()
     ast.res = self:newreg()
     self:emit([[
-%s = getelementptr %s, %s* %s, i64 %s
+%s = getelementptr %s, %s* %s, %s %s
 %s = load %s, %s* %s
-]], ptr, elem, elem, ast.array.res, idx,
+]], ptr, elem, elem, ast.array.res, idxty, idx,
 	ast.res, elem, elem, ptr)
     ty = aty.elem
   elseif tag == "newarray" then
