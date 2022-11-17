@@ -143,7 +143,7 @@ local grammar = lpeg.P{"prog",
        + Rw"if" * exp * block * (Rw"else" * block)^-1
               / node("if", "cond", "th", "el")
        + Rw"return" * exp * T";" / node("return", "e")
-       + Rw"delarray" * (ID / node("var", "id"))
+       + Rw"delarray" * exp
               / node("delarray", "array")
        + call
        + lhs * T"=" * exp * T";" / node("assg", "lhs", "exp"),
