@@ -272,13 +272,24 @@ function Compiler:codeJmpFalse (ast, label)
     self:codeJmpFalse(ast.e1, label)
     self:codeJmpFalse(ast.e2, label)
   elseif tag == "disj" then
-    local labelEnd = newlabel()
+    local labelEnd = self:newlabel()
     self:codeJmpTrue(ast.e1, labelEnd)
     self:codeJmpFalse(ast.e2, label)
-    self:fixlabel2here(labelEnd)
+    self:emit([[
+br label %%%s
+%s:
+]], labelEnd, labelEnd)
   else
     self:codeIntExp(ast)
-    self:addJmp("IfZJmp", label)
+    local continueLabel = self:newlabel()
+    local cmpreg = self:newreg()
+    self:emit([[
+%s = icmp eq i32 %s, 0
+br i1 %s, label %%%s, label %%%s
+%s:
+]], cmpreg, ast.res,
+    cmpreg, label, continueLabel,
+    continueLabel)
   end
 end
 
@@ -291,13 +302,24 @@ function Compiler:codeJmpTrue (ast, label)
     self:codeJmpTrue(ast.e1, label)
     self:codeJmpTrue(ast.e2, label)
   elseif tag == "conj" then
-    local labelEnd = newlabel()
+    local labelEnd = self:newlabel()
     self:codeJmpFalse(ast.e1, labelEnd)
     self:codeJmpTrue(ast.e2, label)
-    self:fixlabel2here(labelEnd)
+    self:emit([[
+br label %%%s
+%s:
+]], labelEnd, labelEnd)
   else
     self:codeIntExp(ast)
-    self:addJmp("IfNZJmp", label)
+    local continueLabel = self:newlabel()
+    local cmpreg = self:newreg()
+    self:emit([[
+%s = icmp ne i32 %s, 0
+br i1 %s, label %%%s, label %%%s
+%s:
+]], cmpreg, ast.res,
+    cmpreg, label, continueLabel,
+    continueLabel)
   end
 end
 
