@@ -369,6 +369,10 @@ function Compiler:codeBool(ast)
     self:codeIntExp(ast.e1)
   end
 
+  if ast.e1.label then
+    e1Label = ast.e1.label
+  end
+
   self:emit([[
 %s = icmp eq %s %s, %s
 br i1 %s, label %%%s, label %%%s
@@ -384,6 +388,10 @@ br i1 %s, label %%%s, label %%%s
     self:codeIntExp(ast.e2)
   end
 
+  if ast.e2.label then
+    e2Label = ast.e2.label
+  end
+
   self:emit([[br label %%%s
 %s:
 %s = phi %s [ %s, %%%s ], [ %s, %%%s ]
@@ -391,7 +399,9 @@ br i1 %s, label %%%s, label %%%s
     exitLabel,
     res, type2VM(ast.e1.ty), ast.e2.res, e2Label, ast.e1.res, e1Label)
 
+	ast.label = exitLabel
 	ast.res = res
+	ast.ty = intTy
 end
 
 
