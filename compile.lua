@@ -165,7 +165,7 @@ local grammar = lpeg.P{"prog",
 
   sum = binOpL(product, opA),
 
-  comparison = binOpL(sum, opC),
+  comparison = opL(sum, opC,"cmp"),
 
   conjunction = opL(comparison, Op"&&", "conj"),
 
@@ -566,6 +566,15 @@ local ops = {["+"] = "add", ["-"] = "sub",
              ["*"] = "mul", ["/"] = "div", ["%"] = "mod"
 }
 
+local cmpop = {
+  ["<"]  = "slt",
+  ["<="] = "sle",
+  [">"]  = "sgt",
+  [">="] = "sge",
+  ["=="] = "eq",
+  ["~="] = "ne",
+}
+
 function Compiler:codeExp (ast)
   local tag = ast.tag
   local ty
@@ -640,6 +649,17 @@ function Compiler:codeExp (ast)
     ast.res = self:newreg()
     self:emit("%s = %s i32 %s, %s\n",
                   ast.res, ops[ast.op], ast.e1.res, ast.e2.res)
+  elseif tag == "cmp" then
+    self:codeIntExp(ast.e1)
+    self:codeIntExp(ast.e2)
+    ty = intTy
+    ast.res = self:newreg()
+    local cmpreg = self:newreg()
+    self:emit([[
+%s = icmp %s i32 %s, %s
+%s = zext i1 %s to i32
+]], cmpreg, cmpop[ast.op], ast.e1.res, ast.e2.res,
+    ast.res, cmpreg)
   elseif tag == "conj" or tag == "disj" then
     self:codeBool(ast)
     ty = intTy
