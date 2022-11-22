@@ -208,6 +208,16 @@ function Compiler:newreg ()
 end
 
 
+local function count2label (count)
+  return string.format("L%d", count)
+end
+
+
+function Compiler:newlabel ()
+  return count2label(self:newcount())
+end
+
+
 function Compiler:name2idx (name)
   local idx = self.vars[name]
   if not idx then
@@ -343,6 +353,48 @@ function Compiler:codeAddr (array, index)
 end
 
 
+function Compiler:codeBool(ast)
+
+  local res = self:newreg()
+  local e1 = self:newreg()
+  local e1Label, e2Label, exitLabel = self:newlabel(), self:newlabel(), self:newlabel()
+
+  self:emit([[br label %%%s
+%s:
+]], e1Label, e1Label)
+
+  if ast.e1.tag == "conj" or ast.e1.tag == "disj" then
+    self:codeBool(ast.e1)
+  else
+    self:codeIntExp(ast.e1)
+  end
+
+  self:emit([[
+%s = icmp eq %s %s, %s
+br i1 %s, label %%%s, label %%%s
+
+%s:
+]], e1, type2VM(ast.e1.ty), ast.e1.res, ast.tag == "disj" and "0" or "1",
+    e1, e2Label, exitLabel,
+    e2Label)
+
+  if ast.e2.tag == "conj" or ast.e2.tag == "disj" then
+    self:codeBool(ast.e2)
+  else
+    self:codeIntExp(ast.e2)
+  end
+
+  self:emit([[br label %%%s
+%s:
+%s = phi %s [ %s, %%%s ], [ %s, %%%s ]
+]], exitLabel,
+    exitLabel,
+    res, type2VM(ast.e1.ty), ast.e2.res, e2Label, ast.e1.res, e1Label)
+
+	ast.res = res
+end
+
+
 function Compiler:codeLhs (ast)
   local tag = ast.tag
   if tag == "var" then
@@ -416,11 +468,9 @@ function Compiler:codeStat (ast)
     if not typeEq(retty, self.retty) then
       throw("invalid return type")
     end
-    self:addCode("ret", #self.params)
     self:emit("ret %s %s\n", type2VM(ast.e.ty), ast.e.res)
   elseif tag == "call" then
     self:codeCall(ast)
-    self:addCode("pop", 1)
   elseif tag == "local" then
     local idx = self:newreg()
     local ety = ast.ty
@@ -580,19 +630,8 @@ function Compiler:codeExp (ast)
     ast.res = self:newreg()
     self:emit("%s = %s i32 %s, %s\n",
                   ast.res, ops[ast.op], ast.e1.res, ast.e2.res)
-  elseif tag == "conj" then
-    local label = newlabel()
-    self:codeIntExp(ast.e1)
-    self:addJmp("andjmp", label)
-    self:codeIntExp(ast.e2)
-    self:fixlabel2here(label)
-    ty = intTy
-  elseif tag == "disj" then
-    local label = newlabel()
-    self:codeIntExp(ast.e1)
-    self:addJmp("orjmp", label)
-    self:codeIntExp(ast.e2)
-    self:fixlabel2here(label)
+  elseif tag == "conj" or tag == "disj" then
+    self:codeBool(ast)
     ty = intTy
   elseif tag == "call" then
     ty = self:codeCall(ast)
