@@ -1,3 +1,4 @@
+#!/usr/bin/env lua
 local lpeg = require "lpeg"
 
 local pt = require "pt"
@@ -161,7 +162,7 @@ local grammar = lpeg.P{"prog",
 
   sum = binOpL(product, opA),
 
-  comparison = binOpL(sum, opC),
+  comparison = opL(sum, opC, "comp"),
 
   conjunction = opL(comparison, Op"&&", "conj"),
 
@@ -261,6 +262,28 @@ function Compiler:addJmp (label)
 end
 
 
+local function type2VM (ty)
+  if ty.tag == "basictype" then
+    if ty.ty == "int" then
+      return "i32"
+    end
+  elseif ty.tag == "array" then
+    return type2VM(ty.elem) .. "*"
+  end
+  error("unknown type" .. ty.tag)
+end
+
+
+local cmpop = {
+  ["<"] = "slt",
+  [">"] = "sgt",
+  ["<="] = "sle",
+  [">="] = "sge",
+  ["=="] = "eq",
+  ["~="] = "ne",
+}
+
+
 function Compiler:codeJmp (ast, labelT, labelF)
   local tag = ast.tag
   if tag == "not" then
@@ -275,11 +298,19 @@ function Compiler:codeJmp (ast, labelT, labelF)
     self:codeJmp(ast.e1, labelT, label2)
     self:codeLabel(label2)
     self:codeJmp(ast.e2, labelT, labelF)
+  elseif tag == "comp" then
+    self:codeIntExp(ast.e1)
+    self:codeIntExp(ast.e2)
+    self:emit([[
+%r1 = icmp %s %s %s, %s
+br i1 %r1, label %%%s, label %%%s
+]], cmpop[ast.op], type2VM(ast.e1.ty), ast.e1.res, ast.e2.res,
+    labelT, labelF)
   else
     self:codeIntExp(ast)
     self:emit([[
 %r1 = icmp eq i32 %s, 0
-  br i1 %r1, label %%%s, label %%%s
+br i1 %r1, label %%%s, label %%%s
   ]], ast.res, labelF, labelT)
   end
 end
@@ -297,18 +328,6 @@ function Compiler:searchLocal (name)
     end
   end
   return nil
-end
-
-
-local function type2VM (ty)
-  if ty.tag == "basictype" then
-    if ty.ty == "int" then
-      return "i32"
-    end
-  elseif ty.tag == "array" then
-    return type2VM(ty.elem) .. "*"
-  end
-  error("unknown type" .. ty.tag)
 end
 
 
@@ -485,6 +504,7 @@ local ops = {["+"] = "add", ["-"] = "sub",
              ["*"] = "mul", ["/"] = "div", ["%"] = "mod"
 }
 
+
 function Compiler:codeShortCircuit (ast, comp)
   self:codeIntExp(ast.e1)
   local label1 = self.currentlabel
@@ -565,6 +585,15 @@ function Compiler:codeExp (ast)
     self:codeIntExp(ast.e)
     self:emit("%s = sub i32 0, %s\n", reg, ast.e.res)
     ty = intTy
+  elseif tag == "comp" then
+    self:codeExp(ast.e1)
+    self:codeExp(ast.e2)
+   	ty = intTy
+    ast.res = self:emit([[
+%r1 = icmp %s %s %s, %s
+%r2 = zext i1 %r1 to %s
+]], cmpop[ast.op], type2VM(ast.e1.ty), ast.e1.res, ast.e2.res,
+    type2VM(ast.e1.ty))
   elseif tag == "binop" then
     self:codeIntExp(ast.e1)
     self:codeIntExp(ast.e2)
