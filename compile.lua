@@ -110,13 +110,14 @@ local grammar = lpeg.P{"prog",
 
   prog = space * lpeg.Ct((funcDec + globalDec)^1) * -1,
 
-  globalDec = Rw"global" * ID * ty / node("global", "name", "ty"),
+  globalDec = Rw"global" * ID * T":" * ty * T";"
+                 / node("global", "name", "ty"),
 
   ty = Rw"int" * lpeg.Cc("int") / node("basictype", "ty")
      + Rw"array" * ty / node("array", "elem"),
 
-  funcDec = Rw"func" * ID * T"(" * params * T")" * retty * block /
-              node("func", "name", "params", "retty", "body"),
+  funcDec = Rw"func" * ID * T"(" * params * T")" * retty * (block + T";") /
+                 node("func", "name", "params", "retty", "body"),
 
   retty = T":" * ty + lpeg.Cc(intTy),
 
@@ -225,14 +226,6 @@ function Compiler:name2idx (name)
     self.vars[name] = idx
   end
   return idx
-end
-
-function Compiler:addCode (...)
-  local params = {...}
-  local code = self.code
-  for i = 1, #params do
-    code[#code + 1] = params[i]
-  end
 end
 
 
@@ -425,11 +418,9 @@ function Compiler:codeStat (ast)
     if not typeEq(retty, self.retty) then
       throw("invalid return type")
     end
-    self:addCode("ret", #self.params)
     self:emit("ret %s %s\n", type2VM(ast.e.ty), ast.e.res)
   elseif tag == "call" then
     self:codeCall(ast)
-    self:addCode("pop", 1)
   elseif tag == "local" then
     local ety = ast.ty
     local lety = type2VM(ety)
@@ -484,10 +475,7 @@ function Compiler:codeStat (ast)
       self:codeStat(ast.body[i])
     end
     local diff = #self.locals - nvars
-    if diff > 0 then
-      self:addCode("pop", diff)
-      for i = 1, diff do table.remove(self.locals) end
-    end
+    for i = 1, diff do table.remove(self.locals) end
   else error("unknown tag " .. tag)
   end
 end
@@ -501,9 +489,8 @@ function Compiler:codeIntExp (ast)
 end
 
 local ops = {["+"] = "add", ["-"] = "sub",
-             ["*"] = "mul", ["/"] = "div", ["%"] = "mod"
+             ["*"] = "mul", ["/"] = "sdiv", ["%"] = "srem"
 }
-
 
 function Compiler:codeShortCircuit (ast, comp)
   self:codeIntExp(ast.e1)
