@@ -186,7 +186,7 @@ end
 
 end
 -----------------------------------------------------------
-local Compiler = { funcs = {}, vars = {}, nvars = 0 }
+local Compiler = { funcs = {}, vars = {}, globals = {}, nvars = 0 }
 
 
 function Compiler:newcount ()
@@ -309,7 +309,7 @@ br i1 %r1, label %%%s, label %%%s
 end
 
 
-function Compiler:searchLocal (name)
+function Compiler:searchVar (name)
   for i = #self.locals, 1, -1 do
     if self.locals[i].name == name then
       return self.locals[i]
@@ -320,7 +320,8 @@ function Compiler:searchLocal (name)
       return self.params[i]
     end
   end
-  return nil
+
+  return self.globals[name]
 end
 
 
@@ -348,12 +349,12 @@ end
 function Compiler:codeLhs (ast)
   local tag = ast.tag
   if tag == "var" then
-    local loc = self:searchLocal(ast.id)
-    if not loc then
-      throw("global not yet implemented")
+    local var = self:searchVar(ast.id)
+    if not var then
+      throw("Variable not found")
     else
-      ast.res = loc.idx
-      return loc.ty
+      ast.res = var.idx
+      return var.ty
     end
   elseif tag == "indexed" then
     local tyarr = self:codeExp(ast.array)
@@ -519,13 +520,13 @@ function Compiler:codeExp (ast)
     ast.res = string.format("%d", ast.val)
     ty = intTy
   elseif tag == "var" then
-    local loc = self:searchLocal(ast.id)
-    if loc then
-      ty = loc.ty
-      ast.res = self:emit("%r1 = load %s, %s* %s\n",
-                type2VM(ty), type2VM(ty), loc.idx)
+    local var = self:searchVar(ast.id)
+    if not var then
+      throw("Variable not found")
     else
-      self:addCode("loadG", self:name2idx(ast.id))
+      ty = var.ty
+      ast.res = self:emit("%r1 = load %s, %s* %s\n",
+                type2VM(ty), type2VM(ty), var.idx)
     end
   elseif tag == "indexed" then
     local aty = self:codeExp(ast.array)
@@ -631,6 +632,30 @@ function Compiler:codeFunc (ast)
   self:emit("}\n\n")
 end
 
+
+function Compiler:codeGlobal (ast)
+  if self.globals[ast.name] then
+    throw("Global variable '" .. ast.name .. "' already defined.")
+  end
+  ast.idx = "@" .. ast.name
+  self.globals[ast.name] = ast
+  self:emit("@%s = global %s %s\n", ast.name, type2VM(ast.ty), codeZero(ast.ty))
+end
+
+
+function codeZero(ty)
+  if ty.tag == "array" then
+    return "null"
+  elseif ty.tag == "basictype" then
+    if ty.ty == "int" then
+      return "0"
+    end
+  end
+
+  throw("Unrecognised type: '" .. ty.tag .. "', '" .. ty.ty .. "'")
+end
+
+
 function compile (ast)
   Compiler:emit[[
 declare i8* @malloc(i64)
@@ -641,7 +666,11 @@ declare i32 @printf(i8*, ...)
 
 ]]
   for i = 1, #ast do
-    Compiler:codeFunc(ast[i])
+    if ast[i].tag == "func" then
+      Compiler:codeFunc(ast[i])
+    elseif ast[i].tag == "global" then
+      Compiler:codeGlobal(ast[i])
+    end
   end
   local main = Compiler.funcs["main"]
   if not main then
