@@ -540,13 +540,11 @@ function Compiler:codeExp (ast)
     ]], tyresVM, tyresVM, regaddr)
     ty = aty.elem
   elseif tag == "newarray" then
-    local resizep = self:newreg()
-    local resizeI = self:newreg()
     local tyelem = type2VM(ast.ty)
-    self:emit([[
+    local resizeI = self:emit([[
 %r1 = getelementptr %s, %s* null, i32 1
-%r2 = ptrtoint %s* %s to i64
-]], resizep, type2VM(ast.ty), tyelem, resizeI, tyelem, resizep)
+%r2 = ptrtoint %s* %r1 to i64
+]], type2VM(ast.ty), tyelem, tyelem)
     local rsize64 = self:newreg()
     local rsizeB = self:newreg()
     local pi8 = self:newreg()
