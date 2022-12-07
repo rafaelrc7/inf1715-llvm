@@ -321,7 +321,11 @@ function Compiler:searchVar (name)
     end
   end
 
-  return self.globals[name]
+  if self.globals[name] then
+    return self.globals[name]
+  else
+    throw("Variable '" .. name .. "' not found")
+  end
 end
 
 
@@ -350,12 +354,8 @@ function Compiler:codeLhs (ast)
   local tag = ast.tag
   if tag == "var" then
     local var = self:searchVar(ast.id)
-    if not var then
-      throw("Variable not found")
-    else
-      ast.res = var.idx
-      return var.ty
-    end
+    ast.res = var.idx
+    return var.ty
   elseif tag == "indexed" then
     local tyarr = self:codeExp(ast.array)
     if tyarr.tag ~= "array" then
@@ -521,13 +521,9 @@ function Compiler:codeExp (ast)
     ty = intTy
   elseif tag == "var" then
     local var = self:searchVar(ast.id)
-    if not var then
-      throw("Variable not found")
-    else
-      ty = var.ty
-      ast.res = self:emit("%r1 = load %s, %s* %s\n",
-                type2VM(ty), type2VM(ty), var.idx)
-    end
+    ty = var.ty
+    ast.res = self:emit("%r1 = load %s, %s* %s\n",
+              type2VM(ty), type2VM(ty), var.idx)
   elseif tag == "indexed" then
     local aty = self:codeExp(ast.array)
     if aty.tag ~= "array" then
@@ -574,7 +570,7 @@ function Compiler:codeExp (ast)
   elseif tag == "comp" then
     self:codeExp(ast.e1)
     self:codeExp(ast.e2)
-   	ty = intTy
+    ty = intTy
     ast.res = self:emit([[
 %r1 = icmp %s %s %s, %s
 %r2 = zext i1 %r1 to %s
@@ -634,9 +630,6 @@ end
 
 
 function Compiler:codeGlobal (ast)
-  if self.globals[ast.name] then
-    throw("Global variable '" .. ast.name .. "' already defined.")
-  end
   ast.idx = "@" .. ast.name
   self.globals[ast.name] = ast
   self:emit("@%s = global %s %s\n", ast.name, type2VM(ast.ty), codeZero(ast.ty))
@@ -666,10 +659,17 @@ declare i32 @printf(i8*, ...)
 
 ]]
   for i = 1, #ast do
+    local name = ast[i].name
+    if Compiler.globals[name] or Compiler.funcs[name] then
+      throw("Symbol '" .. name .. "' already defined.")
+    end
+
     if ast[i].tag == "func" then
       Compiler:codeFunc(ast[i])
     elseif ast[i].tag == "global" then
       Compiler:codeGlobal(ast[i])
+    else
+      assert(0, "Invalid top level tag " .. ast[i].tag)
     end
   end
   local main = Compiler.funcs["main"]
