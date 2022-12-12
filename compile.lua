@@ -685,6 +685,7 @@ function Compiler:codeFuncDef (ast)
     param.idx = addr
   end
   self:codeStat(ast.body)
+  self:emit("ret %s %s\n", type2VM(ast.retty), codeZero(ast.retty))
   self:emit("}\n\n")
 end
 
