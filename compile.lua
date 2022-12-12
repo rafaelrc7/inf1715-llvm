@@ -598,8 +598,57 @@ function Compiler:codeExp (ast)
 end
 
 
+function Compiler:funcTypeEq(ast)
+  local func = self.funcs[ast.name]
+  if not typeEq(ast.retty, func.retty) then
+    throw("Function signature incompatible with previous declaration/definition: Wrong return value for function '"
+  		    .. ast.name .. "'. Expected '" .. type2VM(func.retty) .. "' got '" .. type2VM(ast.retty) .. "'.")
+  end
+
+  if #ast.params ~= #func.params then
+    throw("Function signature incompatible with previous declaration/definition: Wrong number of parameters for function '"
+  		    .. ast.name .. "'. Expected " .. #func.params .. " got " .. #ast.params .. ".")
+  end
+
+  for i = 1, #func.params do
+    if not typeEq(ast.params[i].ty, func.params[i].ty) then
+  	throw("Function signature incompatible with previous declaration/definition: Wrong type at parameter number "
+  			.. i .. " for function '" .. ast.name ..  "'. Expected '" .. type2VM(func.params[i].ty) .. "' got '" .. type2VM(ast.params[i].ty) .. "'.")
+    end
+  end
+end
+
 function Compiler:codeFunc (ast)
-  self.code = {}
+  if self.globals[ast.name] then
+    throw("Can't declare function using global name '" .. ast.name .. "'")
+  end
+
+  if ast.body then
+    self:codeFuncDef(ast)
+  else
+    self:codeFuncDec(ast)
+  end
+end
+
+function Compiler:codeFuncDec (ast)
+  local func = self.funcs[ast.name]
+  if not func then
+    self.funcs[ast.name] = { params = ast.params, retty = ast.retty, defined = false }
+  else
+    self:funcTypeEq(ast)
+  end
+end
+
+function Compiler:codeFuncDef (ast)
+  local func = self.funcs[ast.name]
+  if func then
+    if func.defined then
+      throw("Function '" .. ast.name "' already defined.")
+    else
+      self:funcTypeEq(ast)
+    end
+  end
+
   self.locals = {}
   self.params = ast.params
   self.retty = ast.retty
@@ -613,7 +662,7 @@ function Compiler:codeFunc (ast)
   end
   self:emit("define %s @%s (%s) {",
             type2VM(ast.retty), ast.name, params)
-  self.funcs[ast.name] = { code = self.code, params = ast.params, retty = ast.retty }
+  self.funcs[ast.name] = { params = ast.params, retty = ast.retty, defined = true }
   self:codeLabel()
   for i = 1, #self.params do
     local param = self.params[i]
@@ -624,12 +673,16 @@ function Compiler:codeFunc (ast)
     param.idx = addr
   end
   self:codeStat(ast.body)
-  self:emit("ret i32 0\n")
   self:emit("}\n\n")
 end
 
 
 function Compiler:codeGlobal (ast)
+  local name = ast.name
+  if Compiler.globals[name] or Compiler.funcs[name] then
+    throw("Symbol '" .. name .. "' already defined.")
+  end
+
   ast.idx = "@" .. ast.name
   self.globals[ast.name] = ast
   self:emit("@%s = global %s %s\n", ast.name, type2VM(ast.ty), codeZero(ast.ty))
@@ -659,11 +712,6 @@ declare i32 @printf(i8*, ...)
 
 ]]
   for i = 1, #ast do
-    local name = ast[i].name
-    if Compiler.globals[name] or Compiler.funcs[name] then
-      throw("Symbol '" .. name .. "' already defined.")
-    end
-
     if ast[i].tag == "func" then
       Compiler:codeFunc(ast[i])
     elseif ast[i].tag == "global" then
@@ -676,6 +724,13 @@ declare i32 @printf(i8*, ...)
   if not main then
     throw("no main function")
   end
+
+  for name, func in pairs(Compiler.funcs) do
+    if not func.defined then
+      throw("Function '" .. name .. "' declared but not defined.")
+    end
+  end
+
   return main.code
 end
 
