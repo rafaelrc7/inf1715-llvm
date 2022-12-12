@@ -266,15 +266,30 @@ local function type2VM (ty)
   error("unknown type" .. ty.tag)
 end
 
+local function throwNotFound(msg)
+  return {
+    __index = function(_, i)
+      assert(false, msg .. ": '" .. i .. "' not found.")
+    end
+  }
+end
 
-local cmpop = {
+local cmpop = setmetatable({
   ["<"] = "slt",
   [">"] = "sgt",
   ["<="] = "sle",
   [">="] = "sge",
   ["=="] = "eq",
   ["~="] = "ne",
-}
+}, throwNotFound("Invalid comparison operator"))
+
+local ops = setmetatable({
+  ["+"] = "add",
+  ["-"] = "sub",
+  ["*"] = "mul",
+  ["/"] = "sdiv",
+  ["%"] = "srem"
+}, throwNotFound("Invalid arithmetic operator"))
 
 
 function Compiler:codeJmp (ast, labelT, labelF)
@@ -489,9 +504,6 @@ function Compiler:codeIntExp (ast)
   end
 end
 
-local ops = {["+"] = "add", ["-"] = "sub",
-             ["*"] = "mul", ["/"] = "sdiv", ["%"] = "srem"
-}
 
 function Compiler:codeShortCircuit (ast, comp)
   self:codeIntExp(ast.e1)
@@ -717,7 +729,7 @@ declare i32 @printf(i8*, ...)
     elseif ast[i].tag == "global" then
       Compiler:codeGlobal(ast[i])
     else
-      assert(0, "Invalid top level tag " .. ast[i].tag)
+      assert(false, "Invalid top level tag " .. ast[i].tag)
     end
   end
   local main = Compiler.funcs["main"]
