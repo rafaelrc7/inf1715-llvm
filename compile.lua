@@ -655,7 +655,7 @@ function Compiler:codeFuncDef (ast)
   local func = self.funcs[ast.name]
   if func then
     if func.defined then
-      throw("Function '" .. ast.name "' already defined.")
+      throw("Function '" .. ast.name .. "' already defined.")
     else
       self:funcTypeEq(ast)
     end
